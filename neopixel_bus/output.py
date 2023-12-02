@@ -1,0 +1,63 @@
+import copy
+import esphome.config_validation as cv
+from esphome.components import output
+import esphome.codegen as cg
+from esphome.const import CONF_CHANNELS, CONF_ID, CONF_NUM_CHIPS
+from . import (
+    CONF_BUS,
+    CONF_CHANNEL_OFFSET,
+    CONF_CHIP_OFFSET,
+    bus_ns,
+)
+
+CONF_REPEAT_DISTANCE = "repeat_distance"
+
+clazz_output = bus_ns.class_("Output", output.FloatOutput, cg.Component)
+
+bus_ns_channels = bus_ns.class_("NeoPixelBusChannels")
+Mapping = bus_ns.struct("Mapping")
+MappingsBuilder_ns = bus_ns.namespace("MappingsBuilder")
+MappingsBuilder = bus_ns.class_("MappingsBuilder")
+
+CONFIG_SCHEMA = output.FLOAT_OUTPUT_SCHEMA.extend(
+    {
+        cv.GenerateID(CONF_ID): cv.declare_id(clazz_output),
+        cv.Required(CONF_CHANNELS): cv.ensure_list(
+            cv.Schema(
+                {
+                    cv.Required(CONF_BUS): cv.use_id(CONF_BUS),
+                    cv.Required(CONF_CHIP_OFFSET): cv.positive_int,
+                    cv.Required(CONF_NUM_CHIPS): cv.positive_not_null_int,
+                    cv.Required(CONF_CHANNEL_OFFSET): cv.positive_int,
+                    cv.Optional(CONF_REPEAT_DISTANCE): cv.positive_not_null_int,
+                }
+            )
+        ),
+    }
+).extend(cv.COMPONENT_SCHEMA)
+
+async def to_code(config):
+    channels = list(config[CONF_CHANNELS])
+    template_len = cg.TemplateArguments(cg.RawExpression(f"{len(channels)}"))
+    out = bus_ns.mappings_builder_create(template_len)
+
+    for channel in channels:
+        bus = await cg.get_variable(channel[CONF_BUS])
+        crd = 0
+        if CONF_REPEAT_DISTANCE in channel:
+            crd = channel[CONF_REPEAT_DISTANCE]
+        out = out.add_mapping(
+            bus.pixel_setter(),
+            channel[CONF_NUM_CHIPS],
+            channel[CONF_CHIP_OFFSET],
+            channel[CONF_CHANNEL_OFFSET],
+            crd,
+        )
+
+    config = config.copy()
+    config[CONF_ID] = copy.deepcopy(config[CONF_ID])
+    config[CONF_ID].type.base = f"{config[CONF_ID].type.base}<{len(channels)}>"
+    var = cg.new_Pvariable(config[CONF_ID], out.done())
+
+    await cg.register_component(var, config)
+    await output.register_output(var, config)
