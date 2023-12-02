@@ -41,7 +41,7 @@ esp8266:
 external_components:
   - source:
       type: git
-      url: https://github.com/mabels/esphome-neopixel_bus.git
+      url: https://github.com/mabels/esphome-neopixel_bus
     components:
     - neopixel_bus
 
